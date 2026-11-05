@@ -73,7 +73,7 @@ public partial class App : Application
         _messages = new MessageWindow();
         _messages.ClipboardChanged += () =>
             Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(Capture));
-        _messages.HotkeyPressed += () => TogglePopup(fromHotkey: true);
+        _messages.HotkeyPressed += TogglePopup;
 
         var hotkey = AppSettings.LoadHotkey(AppPaths.Settings);
         bool hotkeyOk = _messages.TrySetHotkey(hotkey);
@@ -129,41 +129,32 @@ public partial class App : Application
 
     // ------------------------------------------------------------ popup
 
-    internal void TogglePopup(bool fromHotkey)
+    internal void TogglePopup()
     {
         if (_popup is null) return;
         if (_popup.IsVisible)
-        {
             _popup.HidePopup();
-            return;
-        }
-        // Remember the window the user was typing in so we can paste back into it.
-        // A popup opened from the tray has no such window: choosing an item only copies it.
-        var target = fromHotkey ? Input.ForegroundWindow() : IntPtr.Zero;
-        _popup.ShowPopup(target);
+        else
+            _popup.ShowPopup();
     }
 
-    /// <summary>Put the entry on the clipboard and, if there is a target window, paste into it.</summary>
-    internal async Task PasteAsync(HistoryEntry entry, IntPtr target)
+    /// <summary>Put the entry on the clipboard (the user pastes it with Ctrl+V). Returns false on failure.</summary>
+    internal bool CopyToClipboard(HistoryEntry entry)
     {
-        if (_messages is null) return;
+        if (_messages is null) return false;
         var formats = ClipboardFormats(entry);
         if (formats is null)
         {
-            Log.Warn($"entry {entry.Id} has no data to paste");
-            return;
+            Log.Warn($"entry {entry.Id} has no data to copy");
+            return false;
         }
         Store.Touch(entry.Id);
         if (!Win32Clipboard.Write(_messages.Handle, formats))
         {
             Log.Warn($"could not set clipboard for entry {entry.Id}");
-            return;
+            return false;
         }
-        if (target != IntPtr.Zero)
-        {
-            await Task.Delay(50); // let the popup disappear first
-            await Input.PasteIntoAsync(target);
-        }
+        return true;
     }
 
     private List<(uint, byte[])>? ClipboardFormats(HistoryEntry entry)

@@ -18,7 +18,7 @@ internal sealed class TrayIcon : IDisposable
         _app = app;
 
         var menu = new Forms.ContextMenuStrip();
-        _showItem = new Forms.ToolStripMenuItem("기록 열기", null, (_, _) => _app.TogglePopup(fromHotkey: false));
+        _showItem = new Forms.ToolStripMenuItem("기록 열기", null, (_, _) => _app.TogglePopup());
         _showItem.Font = new Font(_showItem.Font, System.Drawing.FontStyle.Bold);
         var shortcutItem = new Forms.ToolStripMenuItem("단축키 변경...", null, (_, _) => _app.ShowHotkeyWindow());
         _autostartItem = new Forms.ToolStripMenuItem("Windows 시작 시 자동 실행", null, (_, _) => _app.ToggleAutostart());
@@ -44,7 +44,7 @@ internal sealed class TrayIcon : IDisposable
         };
         _icon.MouseClick += (_, e) =>
         {
-            if (e.Button == Forms.MouseButtons.Left) _app.TogglePopup(fromHotkey: false);
+            if (e.Button == Forms.MouseButtons.Left) _app.TogglePopup();
         };
         UpdateHotkeyText();
     }

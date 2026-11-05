@@ -25,9 +25,18 @@
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/fellow-survivor-studio/win-clips" />
     <Property Id="ARPNOMODIFY" Value="1" />
 
-    <!-- Close a running copy before files are replaced or removed. -->
-    <util:CloseApplication Id="CloseWinClips" Target="WinClips.exe"
-                           CloseMessage="yes" TerminateProcess="1" RebootPrompt="no" />
+    <!-- Stop a running copy before Windows Installer checks for files in use. The tray app
+         has no visible window, so the usual "close the app" prompts cannot handle it: an
+         upgrade would wait on a prompt instead. taskkill runs silently (WixQuietExec) and its
+         "not running" exit code is ignored. Restart Manager is off for the same reason. -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
+    <SetProperty Id="WixQuietExec64CmdLine" Before="StopWinClips" Sequence="execute"
+                 Value="&quot;[System64Folder]taskkill.exe&quot; /F /IM WinClips.exe" />
+    <CustomAction Id="StopWinClips" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
+                  Execute="immediate" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="StopWinClips" Before="InstallValidate" />
+    </InstallExecuteSequence>
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsFolder" Name="Programs">

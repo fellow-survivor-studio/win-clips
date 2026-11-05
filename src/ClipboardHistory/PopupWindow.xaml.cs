@@ -48,7 +48,6 @@ public partial class PopupWindow : Window
     private readonly Dictionary<long, BitmapSource> _imageCache = new();
     private readonly LinkedList<long> _imageOrder = new();
     private List<EntryItem> _items = new();
-    private IntPtr _target;
     private bool _modalOpen;
     private bool _exiting;
     private Point? _lastMouse;
@@ -70,9 +69,8 @@ public partial class PopupWindow : Window
 
     // ------------------------------------------------------------ show / hide
 
-    internal void ShowPopup(IntPtr target)
+    internal void ShowPopup()
     {
-        _target = target;
         Theme.Apply(Resources);
         UpdateFooter();
         if (SearchBox.Text.Length > 0) SearchBox.Text = ""; // triggers Refresh
@@ -110,9 +108,7 @@ public partial class PopupWindow : Window
 
     internal void UpdateFooter()
     {
-        // Opened from the tray there is no window to paste into, so Enter only copies.
-        var enter = _target == IntPtr.Zero ? "Enter 복사" : "Enter 붙여넣기";
-        Footer.Text = $"{enter} · Ctrl+P 고정 · Ctrl+Del 삭제 · Ctrl+L 비우기 · Esc 닫기";
+        Footer.Text = "Enter 복사 · Ctrl+P 고정 · Ctrl+Del 삭제 · Ctrl+L 비우기 · Esc 닫기";
     }
 
     /// <summary>Called by the app when entries were added or removed.</summary>
@@ -246,19 +242,18 @@ public partial class PopupWindow : Window
 
     // ------------------------------------------------------------ actions
 
-    private async void PasteItem(EntryItem? item)
+    /// <summary>Copy the item to the clipboard and close the list; the user pastes with Ctrl+V.</summary>
+    private void CopyItem(EntryItem? item)
     {
         if (item is null) return;
-        var target = _target;
-        _target = IntPtr.Zero;
         HidePopup();
         try
         {
-            await _app.PasteAsync(item.Entry, target);
+            _app.CopyToClipboard(item.Entry);
         }
         catch (Exception ex)
         {
-            Log.Error("paste failed", ex);
+            Log.Error("copy failed", ex);
         }
     }
 
@@ -314,27 +309,27 @@ public partial class PopupWindow : Window
             case Key.Up: Move(-1); return;
             case Key.PageDown: Move(8); return;
             case Key.PageUp: Move(-8); return;
-            case Key.Enter: PasteItem(Selected); return;
+            case Key.Enter: CopyItem(Selected); return;
             case Key.Escape: HidePopup(); return;
             case Key.P when ctrl: TogglePin(); return;
             case Key.Delete when ctrl: DeleteSelected(); return;
             case Key.L when ctrl: ClearUnpinned(); return;
             case >= Key.D1 and <= Key.D9 when ctrl:
-                PasteNth(key - Key.D1);
+                CopyNth(key - Key.D1);
                 return;
             case >= Key.NumPad1 and <= Key.NumPad9 when ctrl:
-                PasteNth(key - Key.NumPad1);
+                CopyNth(key - Key.NumPad1);
                 return;
         }
         e.Handled = false;
     }
 
-    private void PasteNth(int index)
+    private void CopyNth(int index)
     {
-        if (index < _items.Count) PasteItem(_items[index]);
+        if (index < _items.Count) CopyItem(_items[index]);
     }
 
-    // ------------------------------------------------------------ mouse: hover selects, click pastes
+    // ------------------------------------------------------------ mouse: hover selects, click copies
 
     private EntryItem? ItemAt(MouseEventArgs e)
     {
@@ -373,7 +368,7 @@ public partial class PopupWindow : Window
         if (item is not null && ReferenceEquals(item, _pressedItem))
         {
             e.Handled = true;
-            PasteItem(item);
+            CopyItem(item);
         }
         _pressedItem = null;
     }
