@@ -1,0 +1,77 @@
+<!--
+  Per-user installer for WinClips (no admin rights needed).
+  Installs to %LOCALAPPDATA%\Programs\WinClips, adds a Start menu shortcut,
+  turns on "start with Windows", and starts the app when setup finishes.
+  The clipboard history itself (%LOCALAPPDATA%\ClipboardHistory) is kept on uninstall.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package Name="WinClips"
+           Manufacturer="fellow-survivor-studio"
+           Version="$(var.Version)"
+           UpgradeCode="6F1C2B7E-4D7A-4B53-9E0B-3C8F2E5A9D41"
+           Language="1042"
+           Codepage="949"
+           Scope="perUser"
+           Compressed="yes"
+           InstallerVersion="500">
+
+    <MajorUpgrade DowngradeErrorMessage="더 새로운 버전의 WinClips가 이미 설치되어 있습니다." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon" SourceFile="..\src\ClipboardHistory\Assets\app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/fellow-survivor-studio/win-clips" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <!-- Close a running copy before files are replaced or removed. -->
+    <util:CloseApplication Id="CloseWinClips" Target="WinClips.exe"
+                           CloseMessage="yes" TerminateProcess="1" RebootPrompt="no" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="WinClips" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component Id="MainExe" Guid="B3F0E4A2-6A51-4C0F-8E7B-2D9C61A4F7E3">
+        <File Id="WinClipsExe" Source="$(var.PublishDir)WinClips.exe" />
+        <RegistryValue Root="HKCU" Key="Software\fellow-survivor-studio\WinClips"
+                       Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+        <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsFolder" On="uninstall" />
+        <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      </Component>
+
+      <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="5C2D8E91-0B7F-4E3A-A6D4-9F1B3C7E2A58">
+        <Shortcut Id="WinClipsShortcut" Name="WinClips" Description="클립보드 기록"
+                  Target="[INSTALLFOLDER]WinClips.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+        <RegistryValue Root="HKCU" Key="Software\fellow-survivor-studio\WinClips"
+                       Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <!-- Same value the app writes from its tray menu, so the checkmark stays in sync. -->
+      <Component Id="Autostart" Guid="E8A4C1D7-3F92-4B6E-8D05-7A2C9E4B1F63">
+        <RegistryValue Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                       Name="WinClips" Type="string" Value="&quot;[INSTALLFOLDER]WinClips.exe&quot;" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="WinClips" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+    </Feature>
+
+    <!-- Start the app once setup finishes. This runs from the setup window (the user's own
+         process), not from the installer service: an app started there runs inside the
+         installer's job and cannot read the clipboard. A silent install (/qn) skips it;
+         the app then starts at the next sign-in. -->
+    <Property Id="WixShellExecTarget" Value="[#WinClipsExe]" />
+    <CustomAction Id="LaunchWinClips" DllEntry="WixShellExec" BinaryRef="Wix4UtilCA_X64"
+                  Impersonate="yes" Return="ignore" />
+    <InstallUISequence>
+      <Custom Action="LaunchWinClips" After="ExecuteAction" Condition="NOT Installed AND NOT REMOVE" />
+    </InstallUISequence>
+  </Package>
+</Wix>
