@@ -7,7 +7,8 @@ namespace ClipboardHistory.Core;
 
 public enum EntryKind { Text, Files, Image }
 
-public sealed record HistoryEntry(long Id, EntryKind Kind, string Text, bool Pinned);
+/// <param name="Blob">For images: the name of the compressed image file in the blob directory.</param>
+public sealed record HistoryEntry(long Id, EntryKind Kind, string Text, bool Pinned, string? Blob = null);
 
 /// <summary>
 /// SQLite-backed clipboard history. The schema, hashing and blob format match the
@@ -264,7 +265,10 @@ public sealed class HistoryStore : IDisposable
             Exec("DELETE FROM entries WHERE id = $id", ("$id", id));
             if (string.IsNullOrEmpty(blob)) continue;
             // Another row can't share the blob (hash is unique), so it is safe to remove.
-            try { File.Delete(Path.Combine(_blobDir, blob)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            foreach (var path in new[] { Path.Combine(_blobDir, blob), ThumbnailPath(blob) })
+            {
+                try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
         }
     }
 
@@ -276,12 +280,12 @@ public sealed class HistoryStore : IDisposable
         SqliteCommand cmd;
         if (string.IsNullOrEmpty(query))
         {
-            cmd = Cmd("SELECT id, kind, text, pinned FROM entries" + order, ("$limit", (long)limit));
+            cmd = Cmd("SELECT id, kind, text, pinned, blob FROM entries" + order, ("$limit", (long)limit));
         }
         else
         {
             var escaped = query.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-            cmd = Cmd("SELECT id, kind, text, pinned FROM entries WHERE text LIKE $q ESCAPE '\\'" + order,
+            cmd = Cmd("SELECT id, kind, text, pinned, blob FROM entries WHERE text LIKE $q ESCAPE '\\'" + order,
                 ("$q", "%" + escaped + "%"), ("$limit", (long)limit));
         }
         using (cmd)
@@ -289,7 +293,8 @@ public sealed class HistoryStore : IDisposable
             var list = new List<HistoryEntry>();
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                list.Add(new HistoryEntry(r.GetInt64(0), ParseKind(r.GetString(1)), r.GetString(2), r.GetInt64(3) != 0));
+                list.Add(new HistoryEntry(r.GetInt64(0), ParseKind(r.GetString(1)), r.GetString(2), r.GetInt64(3) != 0,
+                    r.IsDBNull(4) ? null : r.GetString(4)));
             return list;
         }
     }
@@ -303,9 +308,18 @@ public sealed class HistoryStore : IDisposable
             if (!r.Read() || r.GetString(0) != "image" || r.IsDBNull(1)) return null;
             blob = r.GetString(1);
         }
+        return ReadImageBlob(blob);
+    }
+
+    /// <summary>
+    /// Read and decompress an image blob by name. Touches only the file, not the database,
+    /// so it may be called from a background thread.
+    /// </summary>
+    public byte[]? ReadImageBlob(string blob)
+    {
         try
         {
-            using var fs = File.OpenRead(Path.Combine(_blobDir, blob));
+            using var fs = File.OpenRead(Path.Combine(_blobDir, Path.GetFileName(blob)));
             using var z = new ZLibStream(fs, CompressionMode.Decompress);
             using var ms = new MemoryStream();
             z.CopyTo(ms);
@@ -316,6 +330,13 @@ public sealed class HistoryStore : IDisposable
             return null;
         }
     }
+
+    /// <summary>
+    /// Where the list thumbnail (a small PNG made by the app) for an image blob is cached.
+    /// It is deleted together with the entry.
+    /// </summary>
+    public string ThumbnailPath(string blob) =>
+        Path.Combine(_blobDir, Path.GetFileNameWithoutExtension(Path.GetFileName(blob)) + ".thumb.png");
 
     // ------------------------------------------------------------ user actions
 

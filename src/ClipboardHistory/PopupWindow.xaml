@@ -98,7 +98,18 @@
                 <TextBlock Text="{Binding Glyph}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                            FontSize="13" VerticalAlignment="Center" Foreground="{DynamicResource SubtleFg}" />
                 <TextBlock Grid.Column="1" Text="{Binding Preview}" TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" />
+                           VerticalAlignment="Center" Visibility="{Binding TextVisibility}" />
+                <!-- image rows: thumbnail and size instead of a text label -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,2"
+                            Visibility="{Binding ImageVisibility}">
+                  <Border Height="52" MinWidth="52" MaxWidth="160" CornerRadius="3" BorderThickness="1"
+                          BorderBrush="{DynamicResource Line}" Background="{DynamicResource PreviewBg}">
+                    <Image Source="{Binding Thumbnail}" Stretch="Uniform" StretchDirection="DownOnly"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
+                  </Border>
+                  <TextBlock Text="{Binding ImageSize}" Margin="10,0,0,0" VerticalAlignment="Center"
+                             FontSize="11" Foreground="{DynamicResource SubtleFg}" />
+                </StackPanel>
                 <TextBlock Grid.Column="2" Text="&#xE718;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                            FontSize="12" Margin="8,0,0,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource Accent}" Visibility="{Binding PinVisibility}" />

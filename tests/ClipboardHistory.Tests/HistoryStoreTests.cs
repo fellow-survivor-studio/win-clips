@@ -116,6 +116,33 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public void Image_thumbnail_is_listed_and_removed_with_the_entry()
+    {
+        using var s = Open();
+        var dib = FakeDib(4, 3, 0x10);
+        var id = s.AddImage(dib, "[Image 4x3]")!.Value;
+        var entry = s.Search().Single();
+        Assert.NotNull(entry.Blob);
+        Assert.Equal(dib, s.ReadImageBlob(entry.Blob!));
+
+        var thumb = s.ThumbnailPath(entry.Blob!);
+        Assert.Equal(BlobDir, Path.GetDirectoryName(thumb));
+        Assert.EndsWith(".thumb.png", thumb);
+        File.WriteAllBytes(thumb, new byte[] { 1, 2, 3 }); // the app writes the real PNG
+        s.Delete(id);
+        Assert.False(File.Exists(thumb));
+        Assert.Empty(Directory.GetFiles(BlobDir));
+    }
+
+    [Fact]
+    public void Text_entries_have_no_blob()
+    {
+        using var s = Open();
+        s.AddText("plain");
+        Assert.Null(s.Search().Single().Blob);
+    }
+
+    [Fact]
     public void Pruned_images_lose_their_blob()
     {
         using var s = Open(maxItems: 1);

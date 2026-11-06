@@ -13,7 +13,7 @@
     <AssemblyName>WinClips</AssemblyName>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Product>WinClips</Product>
     <Company>fellow-survivor-studio</Company>
     <Copyright>Copyright (c) 2026 fellow-survivor-studio</Copyright>

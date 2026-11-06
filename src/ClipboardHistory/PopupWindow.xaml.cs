@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -15,30 +17,6 @@ using ClipboardHistory.Services;
 
 namespace ClipboardHistory;
 
-/// <summary>One row of the history list.</summary>
-public sealed class EntryItem
-{
-    public EntryItem(HistoryEntry entry, int index)
-    {
-        Entry = entry;
-        Preview = ClipboardData.ListPreview(entry);
-        Glyph = entry.Kind switch
-        {
-            EntryKind.Files => "",  // folder
-            EntryKind.Image => "",  // photo
-            _ => "",                // document
-        };
-        PinVisibility = entry.Pinned ? Visibility.Visible : Visibility.Collapsed;
-        Shortcut = index < 9 ? $"Ctrl+{index + 1}" : "";
-    }
-
-    public HistoryEntry Entry { get; }
-    public string Preview { get; }
-    public string Glyph { get; }
-    public Visibility PinVisibility { get; }
-    public string Shortcut { get; }
-}
-
 public partial class PopupWindow : Window
 {
     private const int PreviewTextChars = 3000;
@@ -47,6 +25,8 @@ public partial class PopupWindow : Window
     private readonly App _app;
     private readonly Dictionary<long, BitmapSource> _imageCache = new();
     private readonly LinkedList<long> _imageOrder = new();
+    private readonly Dictionary<long, BitmapSource> _thumbnails = new();
+    private CancellationTokenSource? _thumbnailLoad;
     private List<EntryItem> _items = new();
     private bool _modalOpen;
     private bool _exiting;
@@ -136,6 +116,7 @@ public partial class PopupWindow : Window
         }
         _items = entries.Select((e, i) => new EntryItem(e, i)).ToList();
         List.ItemsSource = _items;
+        LoadThumbnails();
         CountText.Text = $"{_items.Count}개";
         bool empty = _items.Count == 0;
         EmptyText.Text = SearchBox.Text.Length > 0 ? "일치하는 항목이 없습니다" : "기록이 없습니다";
@@ -172,6 +153,40 @@ public partial class PopupWindow : Window
     }
 
     private void List_SelectionChanged(object sender, SelectionChangedEventArgs e) => ShowPreview(Selected);
+
+    /// <summary>Fill in image thumbnails: cached ones at once, the rest on a background thread.</summary>
+    private void LoadThumbnails()
+    {
+        _thumbnailLoad?.Cancel();
+        var pending = new List<EntryItem>();
+        foreach (var item in _items)
+        {
+            if (item.Entry is not { Kind: EntryKind.Image, Blob: not null }) continue;
+            if (_thumbnails.TryGetValue(item.Entry.Id, out var cached))
+                item.Thumbnail = cached;
+            else
+                pending.Add(item);
+        }
+        if (pending.Count == 0) return;
+
+        var cts = new CancellationTokenSource();
+        _thumbnailLoad = cts;
+        var store = _app.Store;
+        Task.Run(() =>
+        {
+            foreach (var item in pending)
+            {
+                if (cts.IsCancellationRequested) return;
+                var thumb = Thumbnails.Load(store, item.Entry.Blob!);
+                if (thumb is null) continue;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    _thumbnails[item.Entry.Id] = thumb;
+                    item.Thumbnail = thumb;
+                });
+            }
+        });
+    }
 
     // ------------------------------------------------------------ preview
 
@@ -238,6 +253,7 @@ public partial class PopupWindow : Window
     private void ForgetImage(long id)
     {
         if (_imageCache.Remove(id)) _imageOrder.Remove(id);
+        _thumbnails.Remove(id);
     }
 
     // ------------------------------------------------------------ actions
@@ -283,6 +299,7 @@ public partial class PopupWindow : Window
             {
                 _imageCache.Clear();
                 _imageOrder.Clear();
+                _thumbnails.Clear();
             }
         }
         finally
